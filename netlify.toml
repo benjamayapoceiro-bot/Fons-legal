@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build --workspace @fons-legal/web"
+  command = "npm install --workspace=@fons-legal/web --include=dev && npm run build --workspace @fons-legal/web"
   publish = "apps/web/.next"
 
 [[plugins]]
