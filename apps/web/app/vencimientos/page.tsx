@@ -14,7 +14,7 @@ const statuses = { pending:"Pendiente", completed:"Cumplido", dismissed:"Descart
 export default function VencimientosPage(){
  const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(false),[rows,setRows]=useState<Deadline[]>([]),[matters,setMatters]=useState<Matter[]>([]);
  const [title,setTitle]=useState(""),[due,setDue]=useState(""),[matterId,setMatterId]=useState(""),[notes,setNotes]=useState(""),[filter,setFilter]=useState("pending"),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
- let supabase; try{supabase=getSupabase()}catch{supabase=null}
+ let supabase: ReturnType<typeof getSupabase> | null = null; try{supabase=getSupabase()}catch{supabase=null}
  useEffect(()=>{if(!supabase){setError("Falta configurar Supabase.");setReady(true);return}let alive=true;supabase.auth.getSession().then(({data})=>{if(!alive)return;setSession(data.session);setReady(true)});const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>{alive=false;subscription.unsubscribe()}},[]);
  const load=useCallback(async()=>{if(!supabase||!session)return;const [d,m]=await Promise.all([supabase.from("deadlines").select("id,title,due_at,status,notes,matter_id").order("due_at",{ascending:true}),supabase.from("matters").select("id,title,case_number").order("title")]);if(d.error)setError("No se pudieron cargar los vencimientos: "+d.error.message);else setRows((d.data||[]) as Deadline[]);if(!m.error)setMatters((m.data||[]) as Matter[])},[session]);
  useEffect(()=>{void load()},[load]);
