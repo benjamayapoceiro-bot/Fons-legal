@@ -78,12 +78,19 @@ export default function DocumentosPage() {
         const path = `${session.user.id}/${Date.now()}-${i}-${safeName}`;
         const upload = await supabase.storage.from("case-documents").upload(path, file, { contentType: file.type, upsert: false });
         if (upload.error) { setError(`${file.name}: no se pudo subir: ${upload.error.message}`); continue; }
-        const { data: ocr, error: ocrError } = await worker.recognize(file);
+        let ocrText = "";
+        let ocrFailure: string | null = null;
+        try {
+          const result = await worker.recognize(file);
+          ocrText = result.data.text || "";
+        } catch (e) {
+          ocrFailure = e instanceof Error ? e.message : String(e);
+        }
         const insert = await supabase.from("case_documents").insert({
           user_id: session.user.id, matter_id: matterId || null, original_name: file.name,
           storage_path: path, mime_type: file.type, file_size: file.size,
-          status: ocrError ? "ocr_failed" : "ocr_done", ocr_text: ocr?.text || "",
-          ocr_language: "spa", ocr_engine: "tesseract.js-browser", ocr_error: ocrError ? String(ocrError) : null
+          status: ocrFailure ? "ocr_failed" : "ocr_done", ocr_text: ocrText,
+          ocr_language: "spa", ocr_engine: "tesseract.js-browser", ocr_error: ocrFailure
         }).select("id,original_name,status,ocr_text,ocr_error,file_size,created_at,matter_id").single();
         if (insert.error) { setError(`${file.name}: OCR listo, pero no se guardó el registro: ${insert.error.message}`); continue; }
         setDocs(prev => [insert.data as DocRow, ...prev]);
