@@ -1,42 +1,40 @@
-const metrics = [
-  ["Asuntos activos", "—", "Conexión a datos pendiente", "▤"],
-  ["Movimientos nuevos", "—", "Sin sincronización", "↻"],
-  ["Vencimientos", "—", "Verificar en fuente oficial", "◷"],
-  ["Conectores", "0 / 2", "SCBA · PJN pendientes", "⌁"],
-];
-const matters = [
-  { id:"DEMO-001", title:"Expediente de ejemplo A", court:"SCBA · Datos ficticios", status:"Revisión pendiente", tone:"amber" },
-  { id:"DEMO-002", title:"Expediente de ejemplo B", court:"PJN · Datos ficticios", status:"En seguimiento", tone:"violet" },
-  { id:"DEMO-003", title:"Expediente de ejemplo C", court:"Organismo · Datos ficticios", status:"Sin novedades", tone:"slate" },
-];
-export default function Home() {
- return <main className="layout">
-  <aside className="sidebar">
-   <a className="brand" href="#"><span className="brand-icon">F</span><span><b>FONS</b><small>LEGAL & CORP</small></span></a>
-   <p className="nav-caption">ESPACIO DE TRABAJO</p>
-   <a className="nav active" href="#resumen">◫　Resumen</a><a className="nav" href="#asuntos">▤　Asuntos <small>MVP</small></a><a className="nav" href="#vencimientos">◷　Vencimientos</a><a className="nav" href="#integraciones">⌁　Integraciones</a>
-   <div className="user"><span>FT</span><div><b>Fons Legal</b><small>Área de trabajo</small></div></div>
-  </aside>
-  <section className="main">
-   <header className="topbar"><span>Espacio de trabajo　/　<b>Resumen</b></span><span className="env"><i/> Entorno de desarrollo　 <b className="avatar">FT</b></span></header>
-   <div className="content" id="resumen">
-    <div className="intro"><div><p className="eyebrow">FONS LEGAL · OPERACIONES</p><h1>Tu práctica, en orden.</h1><p className="sub">Un espacio central para organizar asuntos, movimientos y próximos pasos.</p></div><span className="demo-pill">●　MVP · Datos de muestra</span></div>
-    <section className="metrics">{metrics.map(([label,value,detail,icon])=><article className="metric" key={label}><div className="metric-head">{label}<span>{icon}</span></div><strong>{value}</strong><p>{detail}</p></article>)}</section>
-    <section className="columns">
-     <article className="panel" id="asuntos"><div className="panel-head"><div><h2>Asuntos recientes</h2><p>Vista previa con registros ilustrativos</p></div><span className="chip">DEMO</span></div>
-      {matters.map(m=><div className="matter" key={m.id}><span className="matter-icon">§</span><div className="matter-info"><b>{m.title}</b><small>{m.id} · {m.court}</small></div><span className={"status "+m.tone}>{m.status}</span></div>)}
-      <footer className="panel-foot">Mostrando 3 registros ficticios <span>Base de datos pendiente</span></footer>
-     </article>
-     <article className="panel" id="integraciones"><div className="panel-head"><div><h2>Plan de puesta en marcha</h2><p>Estado del producto</p></div></div>
-      <div className="task"><span className="check">✓</span><div><b>Esquema inicial de base</b><small>Supabase preparado</small></div><em>LISTO</em></div>
-      <div className="task"><span className="check">✓</span><div><b>Interfaz responsive</b><small>Panel adaptable a celular</small></div><em>LISTO</em></div>
-      <div className="task"><span className="pending">3</span><div><b>Autenticación y permisos</b><small>Sesiones y aislamiento por usuario</small></div><em className="wait">PENDIENTE</em></div>
-      <div className="task"><span className="pending">4</span><div><b>Conectores SCBA / PJN</b><small>Integración autorizada</small></div><em className="wait">PENDIENTE</em></div>
-     </article>
-    </section>
-    <section className="warning" id="vencimientos"><span>!</span><div><b>Seguridad jurídica ante todo</b><p>Esta versión no consulta expedientes reales ni calcula plazos procesales. Verificá movimientos y vencimientos en la fuente oficial. No ingreses datos confidenciales hasta completar autenticación, autorización y revisión de seguridad.</p></div></section>
-    <footer className="page-foot">FONS LEGAL & CORP <span>Panel de operaciones · Versión inicial</span></footer>
-   </div>
-  </section>
- </main>
+"use client";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { getSupabase } from "./lib/supabase";
+
+type Matter={id:string;user_id:string;title:string;court:string;case_number:string;client_name:string|null;status:"active"|"paused"|"closed"|"archived";source:"manual"|"scba"|"pjn"|"other";external_url:string|null;notes:string|null;created_at:string};
+const statuses={active:"Activo",paused:"Pausado",closed:"Cerrado",archived:"Archivado"};
+const portals=[{name:"SCBA",desc:"Mesa de Entradas Virtual · Provincia de Buenos Aires",url:"https://mev.scba.gov.ar/"},{name:"PJN",desc:"Consulta de causas · Justicia Nacional",url:"https://scw.pjn.gov.ar/scw/home.seam"},{name:"INPI",desc:"Trámites y consulta de marcas",url:"https://portaltramites.inpi.gob.ar/"}];
+
+export default function Home(){
+ const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(false),[busy,setBusy]=useState(false);
+ const [signup,setSignup]=useState(false),[email,setEmail]=useState(""),[password,setPassword]=useState("");
+ const [error,setError]=useState(""),[notice,setNotice]=useState(""),[matters,setMatters]=useState<Matter[]>([]);
+ const [query,setQuery]=useState(""),[showForm,setShowForm]=useState(false);
+ const [form,setForm]=useState({title:"",court:"SCBA",case_number:"",client_name:"",source:"manual" as Matter["source"],external_url:"",notes:""});
+ let supabase;
+ try{supabase=getSupabase()}catch{supabase=null}
+ useEffect(()=>{if(!supabase){setError("Falta configurar Supabase en Netlify (variables NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY).");setReady(true);return}
+ let alive=true;
+ supabase.auth.getSession().then(({data,error})=>{if(!alive)return;if(error)setError(error.message);setSession(data.session);setReady(true)});
+ const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>{setSession(s);setError("");setNotice("")});
+ return()=>{alive=false;subscription.unsubscribe()}},[]);
+ const load=useCallback(async()=>{if(!supabase||!session)return;const {data,error}=await supabase.from("matters").select("*").order("created_at",{ascending:false});if(error)setError("Error cargando asuntos: "+error.message);else setMatters((data||[]) as Matter[])},[session]);
+ useEffect(()=>{void load()},[load]);
+ async function auth(e:FormEvent){e.preventDefault();if(!supabase)return;setBusy(true);setError("");setNotice("");try{const r=signup?await supabase.auth.signUp({email:email.trim(),password}):await supabase.auth.signInWithPassword({email:email.trim(),password});if(r.error)throw r.error;if(signup&&!r.data.session)setNotice("Cuenta creada. Revisá tu correo para confirmar el registro.");else setNotice("Sesión iniciada.")}catch(e){setError(e instanceof Error?e.message:"No se pudo iniciar sesión.")}finally{setBusy(false)}}
+ async function createMatter(e:FormEvent){e.preventDefault();if(!supabase||!session)return;if(!form.title.trim()||!form.case_number.trim()){setError("Completá carátula y número de expediente.");return}setBusy(true);setError("");const {error}=await supabase.from("matters").insert({user_id:session.user.id,title:form.title.trim(),court:form.court.trim(),case_number:form.case_number.trim(),client_name:form.client_name.trim()||null,source:form.source,external_url:form.external_url.trim()||null,notes:form.notes.trim()||null,status:"active"});if(error)setError("No se pudo guardar: "+error.message);else{setNotice("Asunto guardado en Supabase.");setForm({title:"",court:"SCBA",case_number:"",client_name:"",source:"manual",external_url:"",notes:""});setShowForm(false);await load()}setBusy(false)}
+ async function updateStatus(m:Matter,status:Matter["status"]){if(!supabase)return;const {error}=await supabase.from("matters").update({status,updated_at:new Date().toISOString()}).eq("id",m.id);if(error)setError(error.message);else await load()}
+ async function remove(m:Matter){if(!supabase||!window.confirm("¿Eliminar el asunto "+m.title+"?"))return;const {error}=await supabase.from("matters").delete().eq("id",m.id);if(error)setError(error.message);else{setNotice("Asunto eliminado.");await load()}}
+ const filtered=matters.filter(m=>[m.title,m.case_number,m.court,m.client_name||""].join(" ").toLowerCase().includes(query.toLowerCase()));
+ if(!ready)return <main className="auth-screen"><div className="auth-card"><span className="brand-icon">F</span><h1>Fons Legal</h1><p>Conectando con tu espacio…</p></div></main>;
+ if(!session)return <main className="auth-screen"><div className="auth-card"><a className="brand auth-brand" href="#"><span className="brand-icon">F</span><span><b>FONS</b><small>LEGAL & CORP</small></span></a><p className="eyebrow">ESPACIO PRIVADO</p><h1>{signup?"Crear cuenta":"Bienvenido de nuevo."}</h1><p className="sub auth-sub">Gestioná tus asuntos desde un espacio privado con acceso por usuario.</p><form className="form-stack" onSubmit={auth}><label>Correo electrónico<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="vos@estudio.com"/></label><label>Contraseña<input type="password" autoComplete={signup?"new-password":"current-password"} required minLength={8} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mínimo 8 caracteres"/></label><button className="primary full" disabled={busy}>{busy?"Procesando…":signup?"Crear cuenta":"Ingresar"}</button></form><button className="link-button" onClick={()=>{setSignup(!signup);setError("");setNotice("")}}>{signup?"Ya tengo cuenta · Ingresar":"¿Primera vez? Crear cuenta"}</button>{error&&<p className="message error">{error}</p>}{notice&&<p className="message success">{notice}</p>}<p className="auth-foot">No cargues información confidencial de clientes hasta completar la revisión operativa y legal del sistema.</p></div></main>;
+ return <main className="layout"><aside className="sidebar"><a className="brand" href="#"><span className="brand-icon">F</span><span><b>FONS</b><small>LEGAL & CORP</small></span></a><p className="nav-caption">ESPACIO DE TRABAJO</p><a className="nav active" href="#resumen">◫　Resumen</a><a className="nav" href="#asuntos">▤　Asuntos</a><a className="nav" href="#portales">⌁　Portales oficiales</a><div className="user"><span>FL</span><div><b>Fons Legal</b><small>{session.user.email}</small></div></div></aside>
+ <section className="main"><header className="topbar"><span>Espacio de trabajo　/　<b>Resumen</b></span><span className="env"><i className="online"/> Sesión iniciada <button className="logout" onClick={async()=>{await supabase?.auth.signOut();setMatters([])}}>Salir</button></span></header><div className="content" id="resumen"><div className="intro"><div><p className="eyebrow">FONS LEGAL · OPERACIONES</p><h1>Tu práctica, en orden.</h1><p className="sub">Organizá asuntos y abrí los portales judiciales oficiales.</p></div><button className="primary" onClick={()=>setShowForm(!showForm)}>{showForm?"Cancelar":"+ Nuevo asunto"}</button></div>
+ {error&&<p className="message error">{error}</p>}{notice&&<p className="message success">{notice}</p>}
+ <section className="metrics"><article className="metric"><div className="metric-head">Asuntos totales<span>▤</span></div><strong>{matters.length}</strong><p>Registros de tu cuenta</p></article><article className="metric"><div className="metric-head">Asuntos activos<span>↗</span></div><strong>{matters.filter(m=>m.status==="active").length}</strong><p>Con estado activo</p></article><article className="metric"><div className="metric-head">Portales oficiales<span>⌁</span></div><strong>3</strong><p>Accesos directos</p></article><article className="metric"><div className="metric-head">Sincronización automática<span>↻</span></div><strong>—</strong><p>Consulta manual por ahora</p></article></section>
+ {showForm&&<section className="panel create-panel"><div className="panel-head"><div><h2>Nuevo asunto</h2><p>El registro queda asociado a tu usuario.</p></div></div><form className="matter-form" onSubmit={createMatter}><label>Carátula / título *<input required value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></label><div className="form-row"><label>Tribunal / organismo *<input required value={form.court} onChange={e=>setForm({...form,court:e.target.value})}/></label><label>Número de expediente *<input required value={form.case_number} onChange={e=>setForm({...form,case_number:e.target.value})}/></label></div><div className="form-row"><label>Cliente (opcional)<input value={form.client_name} onChange={e=>setForm({...form,client_name:e.target.value})}/></label><label>Origen<select value={form.source} onChange={e=>setForm({...form,source:e.target.value as Matter["source"]})}><option value="manual">Carga manual</option><option value="scba">SCBA</option><option value="pjn">PJN</option><option value="other">Otro</option></select></label></div><label>URL oficial (opcional)<input type="url" value={form.external_url} onChange={e=>setForm({...form,external_url:e.target.value})} placeholder="https://…"/></label><label>Notas (opcional)<textarea rows={3} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></label><button className="primary" disabled={busy}>{busy?"Guardando…":"Guardar asunto"}</button></form></section>}
+ <section className="columns"><article className="panel" id="asuntos"><div className="panel-head"><div><h2>Mis asuntos</h2><p>Registros reales guardados en tu cuenta</p></div><span className="chip">EN VIVO</span></div><input className="search-input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar carátula, expediente o tribunal…"/>{filtered.length?filtered.map(m=><div className="matter" key={m.id}><span className="matter-icon">§</span><div className="matter-info"><b>{m.title}</b><small>{m.case_number} · {m.court}{m.client_name?" · "+m.client_name:""}</small>{m.external_url&&<a className="external-link" href={m.external_url} target="_blank" rel="noreferrer">Abrir expediente ↗</a>}</div><div className="matter-actions"><select aria-label="Estado del asunto" value={m.status} onChange={e=>updateStatus(m,e.target.value as Matter["status"])}>{Object.entries(statuses).map(([v,l])=><option value={v} key={v}>{l}</option>)}</select><button className="delete-button" onClick={()=>remove(m)} aria-label="Eliminar asunto">×</button></div></div>):<div className="empty"><span>§</span><b>{query?"No hay coincidencias":"Todavía no cargaste asuntos"}</b><p>{query?"Probá con otro término.":"Creá tu primer registro para empezar."}</p>{!query&&<button className="primary" onClick={()=>setShowForm(true)}>+ Cargar primer asunto</button>}</div>}<footer className="panel-foot">{filtered.length} de {matters.length} asuntos<button className="refresh-button" onClick={()=>void load()}>↻ Actualizar</button></footer></article>
+ <article className="panel" id="portales"><div className="panel-head"><div><h2>Portales oficiales</h2><p>Se abren en sus sitios; iniciá sesión allí.</p></div></div>{portals.map(p=><a className="portal-card" href={p.url} target="_blank" rel="noreferrer" key={p.name}><span className="portal-icon">↗</span><span><b>{p.name}</b><small>{p.desc}</small></span><span className="portal-arrow">Abrir ↗</span></a>)}<div className="portal-note"><b>Conexión judicial pendiente</b><p>La app todavía no extrae ni sincroniza expedientes automáticamente. No guarda contraseñas de portales ni verifica presentaciones o plazos. Comprobá cada dato en la fuente oficial.</p></div></article></section>
+ <section className="warning"><span>!</span><div><b>Primera versión funcional · Sin sincronización judicial</b><p>Inicio de sesión y gestión de asuntos conectados a Supabase; accesos oficiales disponibles. No hay conectores autorizados a SCBA/PJN ni cálculo de vencimientos. Evitá datos sensibles hasta completar auditoría de seguridad y pruebas.</p></div></section><footer className="page-foot">FONS LEGAL & CORP <span>Panel privado · Gestión manual + accesos oficiales</span></footer></div></section></main>
 }
