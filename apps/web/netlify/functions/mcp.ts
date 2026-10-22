@@ -3,6 +3,8 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+declare const Netlify: { env: { get(name: string): string | undefined } };
+
 const env = (name: string) => Netlify.env.get(name);
 
 function authorized(req: Request) {
