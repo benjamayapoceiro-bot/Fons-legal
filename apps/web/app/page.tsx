@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { getSupabase } from "./lib/supabase";
 
 type Matter={id:string;user_id:string;title:string;court:string;case_number:string;client_name:string|null;status:"active"|"paused"|"closed"|"archived";source:"manual"|"scba"|"pjn"|"other";external_url:string|null;notes:string|null;created_at:string};
@@ -13,7 +13,7 @@ export default function Home(){
  const [error,setError]=useState(""),[notice,setNotice]=useState(""),[matters,setMatters]=useState<Matter[]>([]);
  const [query,setQuery]=useState(""),[showForm,setShowForm]=useState(false);
  const [form,setForm]=useState({title:"",court:"SCBA",case_number:"",client_name:"",source:"manual" as Matter["source"],external_url:"",notes:""});
- let supabase;
+ let supabase: SupabaseClient | null = null;
  try{supabase=getSupabase()}catch{supabase=null}
  useEffect(()=>{if(!supabase){setError("Falta configurar Supabase en Netlify (variables NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY).");setReady(true);return}
  let alive=true;
