@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { timingSafeEqual } from "node:crypto";
 
 declare const Netlify: { env: { get(name: string): string | undefined } };
 
@@ -10,7 +11,10 @@ const env = (name: string) => Netlify.env.get(name);
 function authorized(req: Request) {
   const expected = env("MCP_BEARER_TOKEN");
   const actual = req.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-  return Boolean(expected && actual && actual.length === expected.length && actual === expected);
+  if (!expected || !actual) return false;
+  const a = Buffer.from(actual);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function makeServer() {
