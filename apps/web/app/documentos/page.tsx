@@ -85,7 +85,7 @@ export default function DocumentosPage() {
         const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
         try {
           if (isPdf) {
-            const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer(), disableWorker: true }).promise;
+            const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
             pageCount = pdf.numPages;
             const pageTexts: string[] = [];
             for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
