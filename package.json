@@ -1,0 +1,14 @@
+{
+  "name": "fons-legal",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "apps/mcp"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @fons-legal/web",
+    "dev:mcp": "npm run dev --workspace @fons-legal/mcp",
+    "build:web": "npm run build --workspace @fons-legal/web"
+  }
+}
