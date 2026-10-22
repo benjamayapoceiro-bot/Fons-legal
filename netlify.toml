@@ -1,11 +1,11 @@
 [build]
-  command = "npm run build --workspace @fons-legal/web"
+  base = "."
+  command = "npm install --prefix apps/web --workspaces=false --include=dev && npm run build --workspace @fons-legal/web"
   publish = "apps/web/.next"
 
 [build.environment]
   NODE_VERSION = "20"
   NPM_FLAGS = "--include=dev"
-  NODE_ENV = "development"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
