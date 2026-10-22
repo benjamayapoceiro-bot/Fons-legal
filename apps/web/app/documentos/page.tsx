@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { getSupabase } from "../lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 import { createWorker } from "tesseract.js";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 
 type DocRow = { id: string; original_name: string; status: string; ocr_text: string | null; ocr_error: string | null; file_size: number; created_at: string; matter_id: string | null };
 type MatterRow = { id: string; title: string; case_number: string };
@@ -53,9 +54,9 @@ export default function DocumentosPage() {
 
   function chooseFiles(e: ChangeEvent<HTMLInputElement>) {
     const incoming = Array.from(e.target.files || []);
-    const allowed = incoming.filter(f => f.type.startsWith("image/") && f.size <= 50 * 1024 * 1024);
+    const allowed = incoming.filter(f => (f.type.startsWith("image/") || f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")) && f.size <= 50 * 1024 * 1024);
     setFiles(prev => [...prev, ...allowed]);
-    if (allowed.length !== incoming.length) setError("Solo se admiten imágenes de hasta 50 MB cada una. Los PDF se agregarán en otra etapa.");
+    if (allowed.length !== incoming.length) setError("Se admiten imágenes y PDF de hasta 50 MB por archivo.");
     else setError("");
     e.target.value = "";
   }
@@ -80,17 +81,43 @@ export default function DocumentosPage() {
         if (upload.error) { setError(`${file.name}: no se pudo subir: ${upload.error.message}`); continue; }
         let ocrText = "";
         let ocrFailure: string | null = null;
+        let pageCount = 1;
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
         try {
-          const result = await worker.recognize(file);
-          ocrText = result.data.text || "";
+          if (isPdf) {
+            const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer(), disableWorker: true }).promise;
+            pageCount = pdf.numPages;
+            const pageTexts: string[] = [];
+            for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+              setProgress(`OCR PDF ${i + 1}/${queue.length}: ${file.name} · página ${pageNo}/${pdf.numPages}`);
+              const page = await pdf.getPage(pageNo);
+              const viewport = page.getViewport({ scale: 1.6 });
+              const canvas = document.createElement("canvas");
+              const context = canvas.getContext("2d");
+              if (!context) throw new Error("No se pudo crear el lienzo para procesar el PDF.");
+              canvas.width = Math.ceil(viewport.width);
+              canvas.height = Math.ceil(viewport.height);
+              await page.render({ canvasContext: context, viewport, canvas } as any).promise;
+              const result = await worker.recognize(canvas);
+              pageTexts.push(`--- PÁGINA ${pageNo} ---\n${result.data.text || ""}`);
+              canvas.width = 0; canvas.height = 0;
+              page.cleanup();
+            }
+            ocrText = pageTexts.join("\n\n");
+            await pdf.destroy();
+          } else {
+            const result = await worker.recognize(file);
+            ocrText = result.data.text || "";
+          }
         } catch (e) {
           ocrFailure = e instanceof Error ? e.message : String(e);
         }
         const insert = await supabase.from("case_documents").insert({
           user_id: session.user.id, matter_id: matterId || null, original_name: file.name,
-          storage_path: path, mime_type: file.type, file_size: file.size,
+          storage_path: path, mime_type: file.type || (isPdf ? "application/pdf" : "application/octet-stream"), file_size: file.size,
           status: ocrFailure ? "ocr_failed" : "ocr_done", ocr_text: ocrText,
-          ocr_language: "spa", ocr_engine: "tesseract.js-browser", ocr_error: ocrFailure
+          ocr_language: "spa", ocr_engine: isPdf ? "pdfjs+tesseract.js-browser" : "tesseract.js-browser", ocr_error: ocrFailure,
+          page_count: pageCount
         }).select("id,original_name,status,ocr_text,ocr_error,file_size,created_at,matter_id").single();
         if (insert.error) { setError(`${file.name}: OCR listo, pero no se guardó el registro: ${insert.error.message}`); continue; }
         setDocs(prev => [insert.data as DocRow, ...prev]);
@@ -118,15 +145,15 @@ export default function DocumentosPage() {
       <a href="/configuracion" style={{ color: "#c4b5fd" }}>Configurar IA y portales →</a>
     </div>
     <section style={styles.panel}>
-      <h2 style={{ marginTop: 0 }}>1. Agregar imágenes</h2>
-      <p style={styles.muted}>Admite JPG, PNG, WEBP, TIFF y otras imágenes reconocidas por el navegador, hasta 50 MB por archivo. Seleccioná cientos de archivos de una vez o agregá más tandas. Para proteger la privacidad, el OCR corre localmente y solo el original y el texto extraído se guardan en tu espacio privado de Supabase.</p>
+      <h2 style={{ marginTop: 0 }}>1. Agregar documentos</h2>
+      <p style={styles.muted}>Admite imágenes y PDF de hasta 50 MB por archivo. Los PDF se procesan página por página, incluidas las páginas escaneadas, sin enviar el archivo a una IA generativa. Seleccioná muchos archivos de una vez o agregá más tandas. Para proteger la privacidad, el OCR corre localmente y solo el original y el texto extraído se guardan en tu espacio privado de Supabase.</p>
       <label style={{ display: "block", margin: "16px 0" }}>Asociar a expediente (opcional)
         <select style={styles.input} value={matterId} onChange={e => setMatterId(e.target.value)}><option value="">Sin expediente asociado</option>{matters.map(m => <option key={m.id} value={m.id}>{m.case_number} · {m.title}</option>)}</select>
       </label>
-      <input type="file" accept="image/*" multiple onChange={chooseFiles} disabled={busy} style={{ display: "block", maxWidth: "100%", margin: "16px 0" }} />
-      <p style={styles.muted}>{files.length} imágenes en cola. Se procesan una por una para no agotar la memoria del navegador.</p>
+      <input type="file" accept="image/*,application/pdf,.pdf" multiple onChange={chooseFiles} disabled={busy} style={{ display: "block", maxWidth: "100%", margin: "16px 0" }} />
+      <p style={styles.muted}>{files.length} archivos en cola. Se procesan una por una para no agotar la memoria del navegador.</p>
       {files.length > 0 && <div style={{ maxHeight: 150, overflow: "auto", border: "1px solid #302641", borderRadius: 9, padding: 10, marginBottom: 14 }}>{files.slice(0, 12).map((f,i)=><div key={i} style={{ fontSize: 13, padding: 4 }}>{f.name} · {(f.size / 1024 / 1024).toFixed(1)} MB</div>)}{files.length > 12 && <div style={styles.muted}>y {files.length - 12} archivos más…</div>}</div>}
-      <button style={{ ...styles.button, opacity: busy || !files.length ? .5 : 1 }} disabled={busy || !files.length} onClick={() => void processQueue()}>{busy ? "Procesando lote…" : `Subir y hacer OCR de ${files.length} imágenes`}</button>
+      <button style={{ ...styles.button, opacity: busy || !files.length ? .5 : 1 }} disabled={busy || !files.length} onClick={() => void processQueue()}>{busy ? "Procesando lote…" : `Subir y hacer OCR de ${files.length} archivos`}</button>
       {progress && <p style={{ ...styles.muted, marginTop: 14 }}>{progress}</p>}
       {error && <p role="alert" style={{ color: "#fca5a5", marginTop: 14 }}>{error}</p>}
     </section>
@@ -134,6 +161,6 @@ export default function DocumentosPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><div><h2 style={{ margin: 0 }}>2. Archivo documental</h2><p style={styles.muted}>{docs.length} documentos guardados</p></div><input aria-label="Buscar en documentos y OCR" placeholder="Buscar nombre o texto reconocido…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...styles.input, maxWidth: 360, marginTop: 0 }} /></div>
       {visible.length === 0 ? <p style={styles.muted}>Todavía no hay documentos o no hay coincidencias.</p> : visible.map(d => <details key={d.id} style={{ borderTop: "1px solid #302641", padding: "14px 0" }}><summary style={{ cursor: "pointer", display: "flex", gap: 12, justifyContent: "space-between", flexWrap: "wrap" }}><span><b>{d.original_name}</b><small style={{ display: "block", color: "#b9aecb", marginTop: 5 }}>{new Date(d.created_at).toLocaleString("es-AR")} · {(d.file_size / 1024 / 1024).toFixed(2)} MB</small></span><span style={styles.pill}>{d.status === "ocr_done" ? "OCR listo" : d.status}</span></summary><div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 360, overflow: "auto", background: "#0e0b16", borderRadius: 10, padding: 14, marginTop: 12, fontSize: 13, lineHeight: 1.6 }}>{d.ocr_text || d.ocr_error || "No hay texto OCR guardado."}</div><button style={{ ...styles.button, marginTop: 10 }} onClick={() => void navigator.clipboard.writeText(d.ocr_text || "")}>Copiar texto OCR</button></details>)}
     </section>
-    <p style={{ ...styles.muted, marginTop: 22 }}>Nota: el OCR puede equivocarse con sellos, manuscritos o imágenes borrosas. Revisá siempre el original antes de usar fechas, nombres o plazos procesales. Esta primera versión procesa imágenes; los PDF escaneados y la extracción automática de movimientos judiciales requieren módulos adicionales.</p>
+    <p style={{ ...styles.muted, marginTop: 22 }}>Nota: el OCR puede equivocarse con sellos, manuscritos, PDFs torcidos o imágenes borrosas. Revisá siempre el original antes de usar fechas, nombres o plazos procesales. El texto se conserva por página para facilitar búsquedas y revisión.</p>
   </div></main>;
 }
