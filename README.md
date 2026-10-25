@@ -16,3 +16,5 @@ El dashboard usa registros ficticios y todavía no consulta Supabase. SCBA/PJN n
 
 ## Desarrollo
 Requiere Node.js 20+ y npm. Ejecutá `npm install` y luego `npm run dev:web`.
+
+<!-- Trigger redeploy to load rotated MCP_BEARER_TOKEN from Netlify production environment. -->
