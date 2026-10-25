@@ -3,7 +3,8 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { getSupabase } from "./lib/supabase";
 
-type Matter={id:string;user_id:string;title:string;court:string;case_number:string;client_name:string|null;status:"active"|"paused"|"closed"|"archived";source:"manual"|"scba"|"pjn"|"other";external_url:string|null;notes:string|null;created_at:string};\ntype DeadlineSummary={id:string;title:string;due_at:string;status:"pending"|"completed"|"dismissed";matter_id:string|null};
+type Matter={id:string;user_id:string;title:string;court:string;case_number:string;client_name:string|null;status:"active"|"paused"|"closed"|"archived";source:"manual"|"scba"|"pjn"|"other";external_url:string|null;notes:string|null;created_at:string};
+type DeadlineSummary={id:string;title:string;due_at:string;status:"pending"|"completed"|"dismissed";matter_id:string|null};
 const statuses={active:"Activo",paused:"Pausado",closed:"Cerrado",archived:"Archivado"};
 const portals=[{name:"SCBA",desc:"Mesa de Entradas Virtual · Provincia de Buenos Aires",url:"https://mev.scba.gov.ar/loguin.asp?familiadepto=40"},{name:"PJN",desc:"Consulta de causas · Justicia Nacional",url:"https://scw.pjn.gov.ar/scw/home.seam"},{name:"INPI",desc:"Trámites y consulta de marcas",url:"https://portaltramites.inpi.gob.ar/"}];
 
