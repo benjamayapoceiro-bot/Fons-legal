@@ -1,0 +1,12 @@
+create index if not exists deadlines_matter_id_idx on public.deadlines(matter_id);
+create index if not exists docket_events_matter_id_idx on public.docket_events(matter_id);
+drop policy if exists "Users manage their own matters" on public.matters;
+create policy "Users manage their own matters" on public.matters for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists "Users manage their own deadlines" on public.deadlines;
+create policy "Users manage their own deadlines" on public.deadlines for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists "Users manage their own docket events" on public.docket_events;
+create policy "Users manage their own docket events" on public.docket_events for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists "Users read their own audit events" on public.audit_events;
+create policy "Users read their own audit events" on public.audit_events for select to authenticated using ((select auth.uid()) = user_id);
+drop policy if exists "Users insert their own audit events" on public.audit_events;
+create policy "Users insert their own audit events" on public.audit_events for insert to authenticated with check ((select auth.uid()) = user_id);
