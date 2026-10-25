@@ -33,6 +33,8 @@ export default function DocumentosPage() {
   const workerRef = useRef<Awaited<ReturnType<typeof createWorker>> | null>(null);
 
   useEffect(() => {
+    const matterFromUrl = new URLSearchParams(window.location.search).get("matter");
+    if (matterFromUrl) setMatterId(matterFromUrl);
     let alive = true;
     let supabase;
     try { supabase = getSupabase(); } catch (e) { setError(e instanceof Error ? e.message : "Supabase no está configurado"); setReady(true); return; }
@@ -134,7 +136,7 @@ export default function DocumentosPage() {
     }
   }
 
-  const visible = docs.filter(d => (d.original_name + " " + (d.ocr_text || "")).toLowerCase().includes(search.toLowerCase()));
+  const visible = docs.filter(d => (!matterId || d.matter_id === matterId) && (d.original_name + " " + (d.ocr_text || "")).toLowerCase().includes(search.toLowerCase()));
   if (!ready) return <main style={styles.page}>Cargando espacio documental…</main>;
   if (!session) return <main style={styles.page}><div style={styles.wrap}><h1>Fons Legal · Documentos</h1><p style={styles.muted}>Necesitás iniciar sesión en el panel principal para administrar expedientes.</p><a href="/" style={{ color: "#c4b5fd" }}>Volver al inicio →</a>{error && <p>{error}</p>}</div></main>;
 
@@ -158,8 +160,8 @@ export default function DocumentosPage() {
       {error && <p role="alert" style={{ color: "#fca5a5", marginTop: 14 }}>{error}</p>}
     </section>
     <section style={styles.panel}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><div><h2 style={{ margin: 0 }}>2. Archivo documental</h2><p style={styles.muted}>{docs.length} documentos guardados</p></div><input aria-label="Buscar en documentos y OCR" placeholder="Buscar nombre o texto reconocido…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...styles.input, maxWidth: 360, marginTop: 0 }} /></div>
-      {visible.length === 0 ? <p style={styles.muted}>Todavía no hay documentos o no hay coincidencias.</p> : visible.map(d => <details key={d.id} style={{ borderTop: "1px solid #302641", padding: "14px 0" }}><summary style={{ cursor: "pointer", display: "flex", gap: 12, justifyContent: "space-between", flexWrap: "wrap" }}><span><b>{d.original_name}</b><small style={{ display: "block", color: "#b9aecb", marginTop: 5 }}>{new Date(d.created_at).toLocaleString("es-AR")} · {(d.file_size / 1024 / 1024).toFixed(2)} MB</small></span><span style={styles.pill}>{d.status === "ocr_done" ? "OCR listo" : d.status}</span></summary><div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 360, overflow: "auto", background: "#0e0b16", borderRadius: 10, padding: 14, marginTop: 12, fontSize: 13, lineHeight: 1.6 }}>{d.ocr_text || d.ocr_error || "No hay texto OCR guardado."}</div><button style={{ ...styles.button, marginTop: 10 }} onClick={() => void navigator.clipboard.writeText(d.ocr_text || "")}>Copiar texto OCR</button></details>)}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}><div><h2 style={{ margin: 0 }}>2. Archivo documental</h2><p style={styles.muted}>{visible.length} documentos visibles · {docs.length} en total {matterId ? "· filtrado por expediente" : ""}</p></div><input aria-label="Buscar en documentos y OCR" placeholder="Buscar nombre o texto reconocido…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...styles.input, maxWidth: 360, marginTop: 0 }} /></div>
+      {visible.length === 0 ? <p style={styles.muted}>Todavía no hay documentos asociados a este expediente o no hay coincidencias.</p> : visible.map(d => <details key={d.id} style={{ borderTop: "1px solid #302641", padding: "14px 0" }}><summary style={{ cursor: "pointer", display: "flex", gap: 12, justifyContent: "space-between", flexWrap: "wrap" }}><span><b>{d.original_name}</b><small style={{ display: "block", color: "#b9aecb", marginTop: 5 }}>{new Date(d.created_at).toLocaleString("es-AR")} · {(d.file_size / 1024 / 1024).toFixed(2)} MB</small></span><span style={styles.pill}>{d.status === "ocr_done" ? "OCR listo" : d.status}</span></summary><div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 360, overflow: "auto", background: "#0e0b16", borderRadius: 10, padding: 14, marginTop: 12, fontSize: 13, lineHeight: 1.6 }}>{d.ocr_text || d.ocr_error || "No hay texto OCR guardado."}</div><button style={{ ...styles.button, marginTop: 10 }} onClick={() => void navigator.clipboard.writeText(d.ocr_text || "")}>Copiar texto OCR</button></details>)}
     </section>
     <p style={{ ...styles.muted, marginTop: 22 }}>Nota: el OCR puede equivocarse con sellos, manuscritos, PDFs torcidos o imágenes borrosas. Revisá siempre el original antes de usar fechas, nombres o plazos procesales. El texto se conserva por página para facilitar búsquedas y revisión.</p>
   </div></main>;
